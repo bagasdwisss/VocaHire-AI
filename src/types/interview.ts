@@ -1,6 +1,7 @@
 export type CulturePreset = 'startup' | 'bumn' | 'corporate' | 'scholarship';
 export type InterviewMode = 'single' | 'panel_dual';
 export type LanguageCode = 'id' | 'en' | 'ms' | 'ja' | 'ko' | 'de' | 'zh' | 'ar';
+export type TargetRolePreset = 'pm' | 'swe' | 'data' | 'mt' | 'design';
 
 export interface Persona {
   id: string;
@@ -10,29 +11,43 @@ export interface Persona {
   tagline: string;
   voiceStyle: string;
   traits: string[];
+  company: string;
 }
 
 export interface CandidateCV {
   id: string;
   fileName: string;
-  rawText: string;
   candidateName: string;
   targetRole: string;
   experienceYears: number;
+  education: string;
+  rawText: string;
   keySkills: string[];
   careerHighlights: string[];
   potentialGaps: string[];
 }
 
+export interface TrapQuestionDetail {
+  id: string;
+  question: string;
+  gapReason: string;
+  riskOfWrongAnswer: string;
+  suggestedStrategy: string;
+  sampleFormulaAnswer: string;
+}
+
 export interface PreInterviewBriefing {
   matchScore: number; // 0-100%
+  hardSkillScore: number;
+  experienceScore: number;
+  cultureScore: number;
   summary: string;
-  missingKeywords: string[];
-  trapQuestions: {
-    question: string;
-    gapReason: string;
-    suggestedStrategy: string;
+  missingKeywords: {
+    word: string;
+    importance: 'high' | 'medium';
+    category: string;
   }[];
+  trapQuestions: TrapQuestionDetail[];
   strengths: string[];
 }
 
@@ -52,9 +67,11 @@ export interface SessionTurn {
   id: string;
   turnNumber: number;
   speakerPersona: string;
+  speakerRole: string;
   turnType: 'main_question' | 'followup_probe' | 'salary_negotiation';
   questionText: string;
-  copilotHints: string[]; // 3 bullet points from CV
+  probingReason?: string;
+  copilotHints: string[];
   candidateRawAnswer: string;
   durationSeconds: number;
   wpmRate: number;
@@ -81,6 +98,7 @@ export interface RadarMetrics {
 
 export interface InterviewSession {
   id: string;
+  rolePreset: TargetRolePreset;
   targetPosition: string;
   industry: string;
   jobDescription: string;
@@ -91,6 +109,7 @@ export interface InterviewSession {
   secondaryPersona?: Persona;
   copilotEnabled: boolean;
   includeSalaryRound: boolean;
+  candidateCameraEnabled: boolean;
   cv: CandidateCV;
   briefing: PreInterviewBriefing;
   status: 'setup' | 'live' | 'completed';

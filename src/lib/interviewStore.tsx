@@ -10,17 +10,18 @@ import {
   Persona,
   SessionTurn,
   RadarMetrics,
+  TargetRolePreset,
 } from '@/types/interview';
 import {
   PERSONAS,
-  SAMPLE_CANDIDATE_CV,
-  SAMPLE_JOB_DESCRIPTION,
+  ROLE_PRESETS,
 } from './constants';
 import { generatePreInterviewBriefing, evaluateTurn } from './aiAnalysisEngine';
 import { calculateDeliveryScore, calculateOverallScore } from './scoring';
 
 interface InterviewContextType {
   session: InterviewSession;
+  selectRolePreset: (presetKey: TargetRolePreset) => void;
   updatePosition: (pos: string) => void;
   updateIndustry: (ind: string) => void;
   updateJobDescription: (jd: string) => void;
@@ -31,29 +32,40 @@ interface InterviewContextType {
   updatePrimaryPersona: (p: Persona) => void;
   toggleCopilot: () => void;
   toggleSalaryRound: () => void;
+  toggleCandidateCamera: () => void;
   startInterview: () => void;
-  completeInterviewTurn: (userTranscript: string, durationSec: number) => void;
+  completeInterviewTurn: (
+    userTranscript: string,
+    durationSec: number,
+    speakerName?: string,
+    speakerRole?: string
+  ) => void;
   finalizeSession: () => void;
   resetSession: () => void;
 }
 
+const initialPreset = ROLE_PRESETS.pm;
+
 const defaultSession: InterviewSession = {
   id: 'session-default',
-  targetPosition: 'Product Manager',
-  industry: 'Fintech & Digital Commerce',
-  jobDescription: SAMPLE_JOB_DESCRIPTION,
+  rolePreset: 'pm',
+  targetPosition: initialPreset.title,
+  industry: initialPreset.industry,
+  jobDescription: initialPreset.jobDescription,
   culturePreset: 'startup',
   languageCode: 'id',
   interviewMode: 'single',
   primaryPersona: PERSONAS[0],
   secondaryPersona: PERSONAS[1],
   copilotEnabled: true,
-  includeSalaryRound: false,
-  cv: SAMPLE_CANDIDATE_CV,
+  includeSalaryRound: true,
+  candidateCameraEnabled: false,
+  cv: initialPreset.cv,
   briefing: generatePreInterviewBriefing(
-    SAMPLE_CANDIDATE_CV,
-    SAMPLE_JOB_DESCRIPTION,
-    'Product Manager'
+    initialPreset.cv,
+    initialPreset.jobDescription,
+    initialPreset.title,
+    'pm'
   ),
   status: 'setup',
   turns: [],
@@ -76,15 +88,25 @@ const InterviewContext = createContext<InterviewContextType | null>(null);
 export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<InterviewSession>(defaultSession);
 
-  // Recalculate briefing when CV or JD changes
-  useEffect(() => {
-    const updatedBriefing = generatePreInterviewBriefing(
-      session.cv,
-      session.jobDescription,
-      session.targetPosition
+  const selectRolePreset = (presetKey: TargetRolePreset) => {
+    const preset = ROLE_PRESETS[presetKey] || ROLE_PRESETS.pm;
+    const briefing = generatePreInterviewBriefing(
+      preset.cv,
+      preset.jobDescription,
+      preset.title,
+      presetKey
     );
-    setSession((prev) => ({ ...prev, briefing: updatedBriefing }));
-  }, [session.cv, session.jobDescription, session.targetPosition]);
+
+    setSession((prev) => ({
+      ...prev,
+      rolePreset: presetKey,
+      targetPosition: preset.title,
+      industry: preset.industry,
+      jobDescription: preset.jobDescription,
+      cv: preset.cv,
+      briefing,
+    }));
+  };
 
   const updatePosition = (targetPosition: string) => {
     setSession((prev) => ({ ...prev, targetPosition }));
@@ -95,11 +117,27 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updateJobDescription = (jobDescription: string) => {
-    setSession((prev) => ({ ...prev, jobDescription }));
+    setSession((prev) => {
+      const briefing = generatePreInterviewBriefing(
+        prev.cv,
+        jobDescription,
+        prev.targetPosition,
+        prev.rolePreset
+      );
+      return { ...prev, jobDescription, briefing };
+    });
   };
 
   const updateCv = (cv: CandidateCV) => {
-    setSession((prev) => ({ ...prev, cv }));
+    setSession((prev) => {
+      const briefing = generatePreInterviewBriefing(
+        cv,
+        prev.jobDescription,
+        prev.targetPosition,
+        prev.rolePreset
+      );
+      return { ...prev, cv, briefing };
+    });
   };
 
   const updateCulture = (culturePreset: CulturePreset) => {
@@ -126,60 +164,71 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setSession((prev) => ({ ...prev, includeSalaryRound: !prev.includeSalaryRound }));
   };
 
+  const toggleCandidateCamera = () => {
+    setSession((prev) => ({ ...prev, candidateCameraEnabled: !prev.candidateCameraEnabled }));
+  };
+
   const startInterview = () => {
     setSession((prev) => ({
       ...prev,
-      id: `vh-session-${Date.now().toString(36).toUpperCase()}`,
+      id: `vh-${Date.now().toString(36).toUpperCase()}`,
       status: 'live',
       turns: [],
       durationSeconds: 0,
     }));
   };
 
-  const completeInterviewTurn = (userTranscript: string, durationSec: number) => {
+  const completeInterviewTurn = (
+    userTranscript: string,
+    durationSec: number,
+    speakerName?: string,
+    speakerRole?: string
+  ) => {
     setSession((prev) => {
       const turnNumber = prev.turns.length + 1;
       const question =
         turnNumber === 1
-          ? 'Ceritakan tentang diri Anda dan inisiatif kepemimpinan terbesar Anda yang berdampak pada metrik produk.'
+          ? `Halo ${prev.cv.candidateName}! Senang bisa berdiskusi hari ini. Boleh ceritakan tentang diri Anda dan inisiatif kepemimpinan terbesar Anda yang berdampak signifikan pada metrik produk?`
           : turnNumber === 2
-          ? 'Bagaimana cara Anda memprioritaskan fitur saat ada perbedaan pendapat antara tim engineering dan target bisnis sales?'
-          : 'Berapa ekspektasi kompensasi Anda untuk posisi ini, dan apa dasar nilai yang Anda bawa ke perusahaan?';
+          ? 'Bagaimana cara Anda memprioritaskan fitur saat ada pertentangan keras antara tim engineering (soal technical debt) dan target agresif sales?'
+          : 'Berapa ekspektasi kompensasi finansial Anda untuk posisi ini, dan apa dasar nilai yang Anda tawarkan ke perusahaan?';
 
-      const copilotHints = [
-        'Sebutkan proyek 1-Click Checkout di PT Kreasi Fintech',
-        'Tekankan kenaikan payment success rate 78% -> 88.5%',
-        'Jelaskan koordinasi squad lintas fungsi (7 tim teknis)',
-      ];
+      const copilotHints = prev.cv.careerHighlights.length >= 3
+        ? prev.cv.careerHighlights
+        : [
+            'Sebutkan proyek kepemimpinan terbesar Anda di CV',
+            'Tekankan metrik peningkatan persentase terukur',
+            'Jelaskan cara kolaborasi lintas divisi',
+          ];
 
       const newTurn: SessionTurn = evaluateTurn(
         turnNumber,
         question,
         userTranscript,
         durationSec,
-        copilotHints
+        copilotHints,
+        speakerName || prev.primaryPersona.name,
+        speakerRole || prev.primaryPersona.role
       );
 
-      const updatedTurns = [...prev.turns, newTurn];
       return {
         ...prev,
-        turns: updatedTurns,
+        turns: [...prev.turns, newTurn],
       };
     });
   };
 
   const finalizeSession = () => {
     setSession((prev) => {
-      // Calculate overall statistics
-      const totalTurns = prev.turns.length;
-      if (totalTurns === 0) {
-        // Mock a turn if user quickly tested
+      if (prev.turns.length === 0) {
         const mockTurn = evaluateTurn(
           1,
-          'Ceritakan tentang pengalaman Anda menangani proyek dengan tenggat waktu ketat.',
-          'Waktu itu di kantor lama saya memimpin pembuatan fitur checkout dalam 3 minggu, hasilnya sukses.',
-          45,
-          ['Sebutkan nama perusahaan', 'Tekankan metrik keberhasilan', 'Jelaskan peran aktif Anda']
+          'Ceritakan tentang pengalaman Anda memimpin proyek kritis di bawah tekanan.',
+          'Waktu itu di perusahaan sebelumnya saya memimpin perbaikan alur checkout selama 3 minggu, hasilnya berhasil meningkatkan transaksi.',
+          40,
+          prev.cv.careerHighlights,
+          prev.primaryPersona.name,
+          prev.primaryPersona.role
         );
         prev.turns = [mockTurn];
       }
@@ -205,11 +254,11 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const deliveryScore = calculateDeliveryScore(totalFiller, totalWords, avgWpm);
 
       const radarMetrics: RadarMetrics = {
-        star: avgStar || 8.5,
-        impact: 8.0,
-        relevance: 9.0,
-        delivery: deliveryScore || 7.5,
-        conciseness: 8.0,
+        star: avgStar || 8.6,
+        impact: 8.4,
+        relevance: 9.1,
+        delivery: deliveryScore || 7.8,
+        conciseness: 8.2,
       };
 
       const overallScore = calculateOverallScore(radarMetrics);
@@ -221,7 +270,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         radarMetrics,
         avgWpm,
         totalFillerWords: totalFiller,
-        durationSeconds: prev.turns.reduce((acc, t) => acc + t.durationSeconds, 0) || 180,
+        durationSeconds: prev.turns.reduce((acc, t) => acc + t.durationSeconds, 0) || 160,
       };
     });
   };
@@ -239,6 +288,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <InterviewContext.Provider
       value={{
         session,
+        selectRolePreset,
         updatePosition,
         updateIndustry,
         updateJobDescription,
@@ -249,6 +299,7 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         updatePrimaryPersona,
         toggleCopilot,
         toggleSalaryRound,
+        toggleCandidateCamera,
         startInterview,
         completeInterviewTurn,
         finalizeSession,

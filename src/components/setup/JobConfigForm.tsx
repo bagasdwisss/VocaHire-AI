@@ -3,31 +3,33 @@
 import React, { useState } from 'react';
 import {
   Briefcase,
-  FileText,
-  Sliders,
-  Globe2,
-  Users,
-  Compass,
+  Code,
+  BrainCircuit,
+  TrendingUp,
+  Palette,
   FileCheck,
   Upload,
   Check,
   DollarSign,
   Lightbulb,
   Building,
+  Video,
+  FileText,
+  Sparkles,
 } from 'lucide-react';
 import { useInterview } from '@/lib/interviewStore';
 import {
   CULTURE_PRESETS,
   LANGUAGES,
   PERSONAS,
-  SAMPLE_CANDIDATE_CV,
-  SAMPLE_JOB_DESCRIPTION,
+  ROLE_PRESETS,
 } from '@/lib/constants';
-import { CulturePreset, LanguageCode, InterviewMode } from '@/types/interview';
+import { CulturePreset, LanguageCode, TargetRolePreset } from '@/types/interview';
 
 export const JobConfigForm: React.FC = () => {
   const {
     session,
+    selectRolePreset,
     updatePosition,
     updateIndustry,
     updateJobDescription,
@@ -38,52 +40,69 @@ export const JobConfigForm: React.FC = () => {
     updatePrimaryPersona,
     toggleCopilot,
     toggleSalaryRound,
+    toggleCandidateCamera,
   } = useInterview();
 
-  const [activeTab, setActiveTab] = useState<'job' | 'cv' | 'settings'>('job');
+  const [activeTab, setActiveTab] = useState<'presets' | 'cv' | 'settings'>('presets');
+  const [isDragging, setIsDragging] = useState(false);
 
-  const handleUseSampleCv = () => {
-    updateCv(SAMPLE_CANDIDATE_CV);
+  // File upload handler
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      updateCv({
+        ...session.cv,
+        fileName: file.name,
+      });
+    }
   };
 
-  const handleUseSampleJd = () => {
-    updateJobDescription(SAMPLE_JOB_DESCRIPTION);
-    updatePosition('Product Manager');
-    updateIndustry('Fintech & Digital Commerce');
-  };
+  const roleList: { id: TargetRolePreset; title: string; icon: any; badge: string }[] = [
+    { id: 'pm', title: 'Product Manager', icon: Briefcase, badge: 'Fintech / B2C' },
+    { id: 'swe', title: 'Software Engineer', icon: Code, badge: 'Backend & Cloud' },
+    { id: 'data', title: 'Data Scientist', icon: BrainCircuit, badge: 'AI & Analytics' },
+    { id: 'mt', title: 'Management Trainee', icon: TrendingUp, badge: 'FMCG / BUMN' },
+    { id: 'design', title: 'UI/UX Designer', icon: Palette, badge: 'Design System' },
+  ];
 
   return (
     <div className="space-y-5">
       {/* Step Header */}
-      <div className="flex items-center justify-between border-b border-obsidian-700/80 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-obsidian-700/80 pb-3 gap-3">
         <div>
-          <h2 className="font-heading font-bold text-base text-white">
-            Konteks & Konfigurasi Ruang
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="w-2 h-2 rounded-full bg-electric-violet"></span>
+            <span className="text-xs font-mono font-bold text-electric-violet uppercase tracking-wider">
+              LANGKAH 1 DARI 3
+            </span>
+          </div>
+          <h2 className="font-heading font-extrabold text-base sm:text-lg text-white">
+            Konfigurasi Posisi & Dokumen CV
           </h2>
           <p className="text-xs text-obsidian-400">
-            Tentukan kualifikasi posisi dan kustomisasi gaya simulasi
+            Pilih spesialisasi peran atau sesuaikan deskripsi lowongan sendiri
           </p>
         </div>
 
-        {/* Quick Tabs on Mobile/Compact */}
-        <div className="flex bg-obsidian-850 p-1 rounded-xl border border-obsidian-700 text-xs">
+        {/* Tab Navigation */}
+        <div className="flex bg-obsidian-850 p-1 rounded-xl border border-obsidian-700 text-xs shrink-0">
           <button
             type="button"
-            onClick={() => setActiveTab('job')}
-            className={`px-3 py-1 rounded-lg transition ${
-              activeTab === 'job'
-                ? 'bg-electric-violet text-white font-medium shadow-sm'
+            onClick={() => setActiveTab('presets')}
+            className={`px-3 py-1.5 rounded-lg transition font-medium ${
+              activeTab === 'presets'
+                ? 'bg-electric-violet text-white shadow-sm'
                 : 'text-obsidian-400 hover:text-white'
             }`}
           >
-            Posisi & JD
+            Pilihan Peran & JD
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('cv')}
-            className={`px-3 py-1 rounded-lg transition ${
+            className={`px-3 py-1.5 rounded-lg transition font-medium ${
               activeTab === 'cv'
-                ? 'bg-electric-violet text-white font-medium shadow-sm'
+                ? 'bg-electric-violet text-white shadow-sm'
                 : 'text-obsidian-400 hover:text-white'
             }`}
           >
@@ -92,24 +111,56 @@ export const JobConfigForm: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('settings')}
-            className={`px-3 py-1 rounded-lg transition ${
+            className={`px-3 py-1.5 rounded-lg transition font-medium ${
               activeTab === 'settings'
-                ? 'bg-electric-violet text-white font-medium shadow-sm'
+                ? 'bg-electric-violet text-white shadow-sm'
                 : 'text-obsidian-400 hover:text-white'
             }`}
           >
-            Pengaturan
+            Ruangan & Persona
           </button>
         </div>
       </div>
 
-      {/* TAB 1: Posisi & JD */}
-      {activeTab === 'job' && (
+      {/* TAB 1: PRESETS PERAN & JD */}
+      {activeTab === 'presets' && (
         <div className="space-y-4">
+          {/* Quick Role Preset Chips */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-obsidian-300 mb-2">
+              Pilih Preset Peran Siap Pakai (1-Click Auto-Fill)
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {roleList.map((item) => {
+                const Icon = item.icon;
+                const isSelected = session.rolePreset === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => selectRolePreset(item.id)}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                      isSelected
+                        ? 'border-electric-violet bg-electric-violet/15 shadow-md shadow-electric-violet/10 text-white'
+                        : 'border-obsidian-700 bg-obsidian-850 text-obsidian-400 hover:border-obsidian-600 hover:text-white'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 mb-1.5 ${isSelected ? 'text-electric-teal' : 'text-obsidian-400'}`} />
+                    <div>
+                      <div className="text-xs font-bold leading-tight line-clamp-1">{item.title}</div>
+                      <div className="text-[10px] text-obsidian-400 line-clamp-1">{item.badge}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Position & Industry Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-1.5">
-                Target Posisi
+              <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-1">
+                Target Posisi Lowongan
               </label>
               <div className="relative">
                 <Briefcase className="w-4 h-4 text-obsidian-400 absolute left-3 top-3" />
@@ -117,15 +168,14 @@ export const JobConfigForm: React.FC = () => {
                   type="text"
                   value={session.targetPosition}
                   onChange={(e) => updatePosition(e.target.value)}
-                  placeholder="Contoh: Product Manager, Software Engineer..."
-                  className="w-full pl-9 pr-3 py-2.5 bg-obsidian-850 border border-obsidian-700 rounded-xl text-sm text-white focus:outline-none focus:border-electric-violet transition"
+                  className="w-full pl-9 pr-3 py-2.5 bg-obsidian-850 border border-obsidian-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-electric-violet transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-1.5">
-                Industri / Sektor
+              <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-1">
+                Industri / Domain
               </label>
               <div className="relative">
                 <Building className="w-4 h-4 text-obsidian-400 absolute left-3 top-3" />
@@ -133,83 +183,107 @@ export const JobConfigForm: React.FC = () => {
                   type="text"
                   value={session.industry}
                   onChange={(e) => updateIndustry(e.target.value)}
-                  placeholder="Contoh: Fintech, SaaS, FMCG, BUMN..."
-                  className="w-full pl-9 pr-3 py-2.5 bg-obsidian-850 border border-obsidian-700 rounded-xl text-sm text-white focus:outline-none focus:border-electric-violet transition"
+                  className="w-full pl-9 pr-3 py-2.5 bg-obsidian-850 border border-obsidian-700 rounded-xl text-xs sm:text-sm text-white focus:outline-none focus:border-electric-violet transition"
                 />
               </div>
             </div>
           </div>
 
+          {/* Job Description Textarea */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-obsidian-300 uppercase tracking-wider">
-                Tempel Kualifikasi Lowongan (Job Description)
+                Kualifikasi & Deskripsi Pekerjaan (JD)
               </label>
-              <button
-                type="button"
-                onClick={handleUseSampleJd}
-                className="text-xs text-electric-teal hover:underline font-medium"
-              >
-                + Muat Contoh JD Fintech
-              </button>
+              <span className="text-[11px] text-electric-teal font-mono">
+                {session.jobDescription.split(/\s+/).filter(Boolean).length} kata teranalisis
+              </span>
             </div>
             <textarea
-              rows={6}
+              rows={5}
               value={session.jobDescription}
               onChange={(e) => updateJobDescription(e.target.value)}
-              placeholder="Salin dan tempel deskripsi lowongan di sini..."
               className="w-full p-3 bg-obsidian-850 border border-obsidian-700 rounded-xl text-xs sm:text-sm text-obsidian-200 focus:outline-none focus:border-electric-violet font-sans leading-relaxed resize-none transition"
             />
           </div>
         </div>
       )}
 
-      {/* TAB 2: Dokumen CV */}
+      {/* TAB 2: DOKUMEN CV & UPLOAD */}
       {activeTab === 'cv' && (
         <div className="space-y-4">
+          {/* Drag & Drop Upload Zone */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file) {
+                updateCv({ ...session.cv, fileName: file.name });
+              }
+            }}
+            className={`border-2 border-dashed rounded-2xl p-5 text-center transition ${
+              isDragging
+                ? 'border-electric-teal bg-electric-teal/10'
+                : 'border-obsidian-700 bg-obsidian-850/60 hover:border-obsidian-600'
+            }`}
+          >
+            <Upload className="w-8 h-8 text-electric-teal mx-auto mb-2" />
+            <h4 className="text-xs sm:text-sm font-bold text-white mb-1">
+              Tarik & Letakkan File CV Anda di Sini (PDF, DOCX, TXT)
+            </h4>
+            <p className="text-xs text-obsidian-400 mb-3">
+              Maksimal 10MB • Enkripsi AES-256 Sesuai Standar Privasi UU PDP
+            </p>
+            <label className="inline-block px-4 py-2 rounded-xl bg-obsidian-800 hover:bg-obsidian-700 border border-obsidian-600 text-xs text-electric-teal font-semibold cursor-pointer transition">
+              Pilih Dokumen dari Komputer
+              <input
+                type="file"
+                accept=".pdf,.docx,.doc,.txt"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {/* Current CV Inspector */}
           <div className="glass-panel p-4 rounded-xl border border-obsidian-700">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <FileCheck className="w-5 h-5 text-electric-teal" />
                 <div>
-                  <h3 className="text-sm font-semibold text-white">
+                  <h4 className="text-xs sm:text-sm font-bold text-white">
                     {session.cv.fileName}
-                  </h3>
-                  <p className="text-xs text-obsidian-400">
-                    Kandidat: <span className="text-slate-200 font-medium">{session.cv.candidateName}</span> ({session.cv.experienceYears} Thn Pengalaman)
+                  </h4>
+                  <p className="text-[11px] text-obsidian-400">
+                    Kandidat: <strong className="text-white">{session.cv.candidateName}</strong> ({session.cv.education})
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleUseSampleCv}
-                className="px-2.5 py-1 text-xs rounded-lg bg-obsidian-800 text-electric-teal hover:bg-obsidian-700 border border-obsidian-600 transition"
-              >
-                Gunakan CV Default
-              </button>
-            </div>
-
-            <div className="p-3 bg-obsidian-900/90 rounded-lg border border-obsidian-800 text-xs text-obsidian-300 max-h-48 overflow-y-auto font-mono whitespace-pre-wrap leading-relaxed">
-              {session.cv.rawText}
-            </div>
-
-            <div className="mt-3 flex items-center justify-between text-xs text-obsidian-400">
-              <span className="flex items-center gap-1 text-emerald-400">
-                <Check className="w-3.5 h-3.5" /> CV Berhasil Terbaca & Terindeks
+              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                Terbaca 100%
               </span>
-              <span>2 Halaman Terdeteksi</span>
+            </div>
+
+            <div className="p-3 bg-obsidian-900 rounded-lg border border-obsidian-800 text-xs text-obsidian-300 max-h-40 overflow-y-auto font-mono whitespace-pre-wrap leading-relaxed">
+              {session.cv.rawText}
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 3: Pengaturan Simulasi */}
+      {/* TAB 3: PENGATURAN RUANG & PERSONA */}
       {activeTab === 'settings' && (
         <div className="space-y-4">
           {/* Preset Budaya */}
           <div>
             <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-2">
-              Preset Budaya Perusahaan
+              Preset Standar Budaya Wawancara
             </label>
             <div className="grid grid-cols-2 gap-2">
               {(Object.keys(CULTURE_PRESETS) as CulturePreset[]).map((key) => {
@@ -238,7 +312,7 @@ export const JobConfigForm: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-1.5">
-                Bahasa Wawancara (8 Pilihan)
+                Bahasa Percakapan (8 Pilihan)
               </label>
               <select
                 value={session.languageCode}
@@ -278,18 +352,18 @@ export const JobConfigForm: React.FC = () => {
                       : 'border-obsidian-700 bg-obsidian-850 text-obsidian-400 hover:text-white'
                   }`}
                 >
-                  Panel 2 AI
+                  Dual-AI Panel
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Persona Selector */}
+          {/* Persona Selection */}
           <div>
             <label className="block text-xs font-semibold text-obsidian-300 uppercase tracking-wider mb-1.5">
-              Pilih Persona Utama
+              Pilih Karakter Pewawancara Utama
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {PERSONAS.map((p) => {
                 const isSelected = session.primaryPersona.id === p.id;
                 return (
@@ -302,11 +376,11 @@ export const JobConfigForm: React.FC = () => {
                         : 'border-obsidian-700 bg-obsidian-850 opacity-70 hover:opacity-100'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2">
                       <span className="text-2xl">{p.avatar}</span>
                       <div>
                         <h4 className="text-xs font-bold text-white">{p.name}</h4>
-                        <p className="text-[11px] text-electric-teal">{p.role}</p>
+                        <p className="text-[10px] text-electric-teal">{p.role}</p>
                       </div>
                     </div>
                   </div>
@@ -315,7 +389,7 @@ export const JobConfigForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Toggle Switches: Copilot & Salary Negotiation */}
+          {/* Feature Toggles */}
           <div className="space-y-2 pt-2 border-t border-obsidian-700/80">
             <label
               onClick={toggleCopilot}
@@ -352,6 +426,25 @@ export const JobConfigForm: React.FC = () => {
                 checked={session.includeSalaryRound}
                 readOnly
                 className="w-4 h-4 accent-electric-teal rounded"
+              />
+            </label>
+
+            <label
+              onClick={toggleCandidateCamera}
+              className="flex items-center justify-between p-3 rounded-xl bg-obsidian-850 border border-obsidian-700 cursor-pointer hover:border-obsidian-600 transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <Video className="w-4 h-4 text-sky-400" />
+                <div>
+                  <div className="text-xs font-semibold text-white">Pratinjau Video Kamera Kandidat</div>
+                  <div className="text-[11px] text-obsidian-400">Tampilkan frame kamera webcam saat sesi berlangsung (mirip Zoom)</div>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={session.candidateCameraEnabled}
+                readOnly
+                className="w-4 h-4 accent-sky-500 rounded"
               />
             </label>
           </div>
