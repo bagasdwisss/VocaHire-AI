@@ -109,7 +109,15 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const updatePosition = (targetPosition: string) => {
-    setSession((prev) => ({ ...prev, targetPosition }));
+    setSession((prev) => {
+      const briefing = generatePreInterviewBriefing(
+        prev.cv,
+        prev.jobDescription,
+        targetPosition,
+        prev.rolePreset
+      );
+      return { ...prev, targetPosition, briefing };
+    });
   };
 
   const updateIndustry = (industry: string) => {
@@ -208,7 +216,9 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         durationSec,
         copilotHints,
         speakerName || prev.primaryPersona.name,
-        speakerRole || prev.primaryPersona.role
+        speakerRole || prev.primaryPersona.role,
+        prev.targetPosition,
+        prev.cv
       );
 
       return {
@@ -224,11 +234,13 @@ export const InterviewProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const mockTurn = evaluateTurn(
           1,
           'Ceritakan tentang pengalaman Anda memimpin proyek kritis di bawah tekanan.',
-          'Waktu itu di perusahaan sebelumnya saya memimpin perbaikan alur checkout selama 3 minggu, hasilnya berhasil meningkatkan transaksi.',
+          'Waktu itu di proyek sebelumnya saya memimpin koordinasi tim selama 3 minggu, hasilnya berhasil meningkatkan target.',
           40,
           prev.cv.careerHighlights,
           prev.primaryPersona.name,
-          prev.primaryPersona.role
+          prev.primaryPersona.role,
+          prev.targetPosition,
+          prev.cv
         );
         prev.turns = [mockTurn];
       }

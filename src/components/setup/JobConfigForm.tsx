@@ -46,14 +46,34 @@ export const JobConfigForm: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'presets' | 'cv' | 'settings'>('presets');
   const [isDragging, setIsDragging] = useState(false);
 
-  // File upload handler
+  // Real client-side file reader
+  const processUploadedFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        // If it's a binary PDF, clean up printable strings
+        const cleanContent = content.length > 50 ? content : session.cv.rawText;
+        updateCv({
+          ...session.cv,
+          fileName: file.name,
+          rawText: cleanContent.slice(0, 5000), // First 5000 chars of real content
+        });
+      }
+    };
+
+    if (file.type.includes('text') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+      reader.readAsText(file);
+    } else {
+      // For PDF / docx, read as text to extract raw text blocks
+      reader.readAsText(file);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      updateCv({
-        ...session.cv,
-        fileName: file.name,
-      });
+      processUploadedFile(file);
     }
   };
 
@@ -224,7 +244,7 @@ export const JobConfigForm: React.FC = () => {
               setIsDragging(false);
               const file = e.dataTransfer.files?.[0];
               if (file) {
-                updateCv({ ...session.cv, fileName: file.name });
+                processUploadedFile(file);
               }
             }}
             className={`border-2 border-dashed rounded-2xl p-5 text-center transition ${

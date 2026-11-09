@@ -30,6 +30,12 @@ import { detectStarFlags } from '@/lib/starDetector';
 import { countFillerWords, calculateWpm } from '@/lib/vocalAnalytics';
 import { AudioManager } from '@/lib/audioManager';
 import { PERSONAS } from '@/lib/constants';
+import {
+  generateDynamicOpeningQuestion,
+  generateDynamicProbingQuestion,
+  generateDynamicSalaryQuestion,
+  extractProfileFromText,
+} from '@/lib/dynamicNlp';
 
 export default function LiveStudioPage() {
   const router = useRouter();
@@ -54,43 +60,61 @@ export default function LiveStudioPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
-  // Questions Sequence
+  // Dynamic Questions State
   const isDualMode = session.interviewMode === 'panel_dual';
   const primaryInterviewer = session.primaryPersona;
   const secondaryInterviewer = session.secondaryPersona || PERSONAS[1];
 
-  const questionsList = [
+  const [turnQuestions, setTurnQuestions] = useState<
+    {
+      speaker: string;
+      role: string;
+      avatar: string;
+      type: string;
+      isProbing: boolean;
+      text: string;
+      probingReason?: string;
+    }[]
+  >(() => [
     {
       speaker: primaryInterviewer.name,
       role: primaryInterviewer.role,
       avatar: primaryInterviewer.avatar,
       type: 'Pertanyaan Utama #1 (Behavioral & Leadership)',
       isProbing: false,
-      text: `Halo ${session.cv.candidateName}! Senang bisa berdiskusi hari ini untuk posisi ${session.targetPosition}. Boleh ceritakan tentang diri Anda dan inisiatif kepemimpinan terbesar yang paling berdampak signifikan pada metrik produk/pekerjaan Anda?`,
+      text: generateDynamicOpeningQuestion(
+        session.targetPosition,
+        session.cv.candidateName,
+        session.cv
+      ),
     },
     {
       speaker: isDualMode ? secondaryInterviewer.name : primaryInterviewer.name,
       role: isDualMode ? secondaryInterviewer.role : primaryInterviewer.role,
       avatar: isDualMode ? secondaryInterviewer.avatar : primaryInterviewer.avatar,
-      type: 'Pertanyaan Kejaran #2 (Dynamic Probing & Trade-offs)',
+      type: 'Pertanyaan Kejaran #2 (Dynamic Probing)',
       isProbing: true,
-      text: `Menarik sekali. Dalam inisiatif tersebut, bagaimana Anda mengatasi trade-off ketika tim teknis meminta penundaan rilis demi kualitas kode/arsitektur, sementara target bisnis menuntut rilis cepat ke pasar?`,
+      text: 'Menarik sekali. Dalam inisiatif tersebut, bagaimana Anda mengatasi trade-off ketika tim teknis meminta penundaan rilis demi kualitas kode/arsitektur, sementara target bisnis menuntut rilis cepat?',
     },
     {
       speaker: isDualMode ? secondaryInterviewer.name : primaryInterviewer.name,
       role: isDualMode ? secondaryInterviewer.role : primaryInterviewer.role,
       avatar: isDualMode ? secondaryInterviewer.avatar : primaryInterviewer.avatar,
       type: session.includeSalaryRound
-        ? 'Babak Spesial #3: Negosiasi Gaji & Penawaran (Salary Negotiation Round)'
+        ? 'Babak Spesial #3: Negosiasi Gaji (Salary Round)'
         : 'Pertanyaan Penutup #3: Visi & Keselarasan Budaya',
       isProbing: false,
       text: session.includeSalaryRound
-        ? `Bagus sekali. Kami sangat terkesan dengan rekam jejak Anda. Namun untuk posisi ${session.targetPosition} ini, anggaran awal kami berada di rentang Rp 16-18 Juta per bulan. Bagaimana pandangan Anda, dan berapa rentang kompensasi total yang Anda harapkan?`
-        : `Terakhir, apa yang membuat Anda yakin bahwa standar budaya kerja ${session.culturePreset.toUpperCase()} di perusahaan kami adalah wadah paling tepat untuk pertumbuhan karier jangka panjang Anda?`,
+        ? generateDynamicSalaryQuestion(
+            session.targetPosition,
+            session.cv.experienceYears,
+            isDualMode ? secondaryInterviewer.name : primaryInterviewer.name
+          )
+        : `Terakhir, apa yang membuat Anda yakin bahwa standar budaya kerja ${session.culturePreset.toUpperCase()} di perusahaan kami adalah wadah paling tepat untuk pertumbuhan karier Anda?`,
     },
-  ];
+  ]);
 
-  const activeQuestion = questionsList[Math.min(currentTurnIdx, questionsList.length - 1)];
+  const activeQuestion = turnQuestions[Math.min(currentTurnIdx, turnQuestions.length - 1)];
 
   // Derived metrics
   const starFlags = detectStarFlags(liveTranscript);
@@ -122,7 +146,7 @@ export default function LiveStudioPage() {
         window.speechSynthesis.cancel();
       }
     };
-  }, [currentTurnIdx, ttsEnabled]);
+  }, [currentTurnIdx, activeQuestion.text, ttsEnabled]);
 
   // Speaking Timer
   useEffect(() => {
@@ -243,7 +267,7 @@ export default function LiveStudioPage() {
     }
   };
 
-  // Submit Answer & Proceed
+  // Submit Answer & Dynamically Generate Next Question!
   const handleCommitTurn = () => {
     if (isRecording) {
       if (recognitionRef.current) recognitionRef.current.stop();
@@ -253,16 +277,40 @@ export default function LiveStudioPage() {
 
     const answerToRecord =
       liveTranscript.trim() ||
-      'Waktu itu di inisiatif checkout, saya memimpin koordinasi lintas tim backend dan desainer. Hasilnya berhasil meningkatkan transaksi sebesar 10.5% dan memangkas drop-off.';
+      `Waktu itu saya memimpin inisiatif di divisi saya untuk mengoptimalkan alur kerja tim. Kami menghadapi kendala waktu yang ketat, namun dengan koordinasi intensif, hasilnya kami berhasil meningkatkan metrik target sebesar 15%.`;
 
     completeInterviewTurn(
       answerToRecord,
-      Math.max(elapsedSec, 30),
+      Math.max(elapsedSec, 25),
       activeQuestion.speaker,
       activeQuestion.role
     );
 
-    if (currentTurnIdx < questionsList.length - 1) {
+    // If Turn 1 finished, dynamically generate Probing Question for Turn 2!
+    if (currentTurnIdx === 0) {
+      const probeSpeaker = isDualMode ? secondaryInterviewer.name : primaryInterviewer.name;
+      const dynamicProbe = generateDynamicProbingQuestion(
+        answerToRecord,
+        probeSpeaker,
+        session.targetPosition
+      );
+
+      setTurnQuestions((prev) => {
+        const updated = [...prev];
+        updated[1] = {
+          speaker: probeSpeaker,
+          role: isDualMode ? secondaryInterviewer.role : primaryInterviewer.role,
+          avatar: isDualMode ? secondaryInterviewer.avatar : primaryInterviewer.avatar,
+          type: 'Pertanyaan Kejaran #2 (Dynamic Probing)',
+          isProbing: true,
+          text: dynamicProbe.question,
+          probingReason: dynamicProbe.reason,
+        };
+        return updated;
+      });
+    }
+
+    if (currentTurnIdx < turnQuestions.length - 1) {
       setCurrentTurnIdx((prev) => prev + 1);
       setLiveTranscript('');
       setElapsedSec(0);
@@ -283,7 +331,7 @@ export default function LiveStudioPage() {
     if (liveTranscript.trim()) {
       completeInterviewTurn(
         liveTranscript.trim(),
-        Math.max(elapsedSec, 25),
+        Math.max(elapsedSec, 20),
         activeQuestion.speaker,
         activeQuestion.role
       );
@@ -292,13 +340,22 @@ export default function LiveStudioPage() {
     router.push('/studio/report');
   };
 
-  // Fast Simulation Sample for testing
+  // Fast Simulation Sample tailored to user's real role!
   const handleSimulateAnswer = () => {
-    const sample =
-      'Waktu itu di inisiatif alur pembayaran, saya melihat [eee] payment success rate tertahan di 78%. Tantangannya adalah drop-off tinggi saat konfirmasi token. Saya menginisiasi perancangan 1-Click Checkout, memimpin sprint beranggotakan 5 software engineers, dan hasilnya [kayak] berhasil menaikkan transaksi menjadi 88.5% serta memangkas drop-off 14%.';
+    const profile = extractProfileFromText(session.cv.rawText, session.cv.candidateName);
+    const keySkill = profile.skills[0] || 'analisis';
+    const sample = `Waktu itu dalam inisiatif saya sebagai ${session.targetPosition}, saya melihat [eee] performa tim kami menghadapi tantangan di bagian efisiensi. Saya menginisiasi perancangan strategi baru berbasis ${keySkill}, mengoordinasikan tim teknis, dan hasilnya [kayak] berhasil menaikkan capaian target sebesar +18.5% serta memangkas waktu proses hingga 2 minggu lebih cepat.`;
     setLiveTranscript(sample);
     setElapsedSec(45);
   };
+
+  // Dynamic Copilot hints extracted directly from candidate's CV
+  const profileData = extractProfileFromText(session.cv.rawText, session.cv.candidateName);
+  const dynamicCopilotHints = [
+    `Fokuskan pada keahlian: ${profileData.skills.slice(0, 3).join(', ')}`,
+    profileData.projects[0] ? `Sebutkan: ${profileData.projects[0]}` : `Sebutkan inisiatif kepemimpinan terbesar Anda`,
+    profileData.metrics[0] ? `Tekankan angka dampak: ${profileData.metrics[0]}` : `Sebutkan persentase angka kenaikan/keberhasilan`,
+  ];
 
   return (
     <div className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 space-y-4">
@@ -325,12 +382,12 @@ export default function LiveStudioPage() {
           </span>
 
           <span className="text-xs px-2.5 py-0.5 rounded-full bg-electric-violet/15 text-electric-violet border border-electric-violet/30 font-mono font-bold hidden md:inline">
-            Giliran {currentTurnIdx + 1} dari {questionsList.length}
+            Giliran {currentTurnIdx + 1} dari {turnQuestions.length}
           </span>
 
           {isDualMode && (
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-teal-500/15 text-electric-teal border border-teal-500/30 font-mono hidden lg:flex items-center gap-1">
-              <Users className="w-3 h-3" /> Panel 2 AI Aktif
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-teal-500/15 text-electric-teal border border-teal-500/30 font-mono hidden lg:flex items-center gap-1 font-semibold">
+              <Users className="w-3.5 h-3.5" /> Panel 2 AI Aktif
             </span>
           )}
         </div>
@@ -348,7 +405,7 @@ export default function LiveStudioPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch flex-1">
         {/* KOLOM KIRI: Visual Pewawancara AI & Holographic Audio Orb (6 Kolom) */}
         <div className="lg:col-span-6 glass-panel rounded-2xl p-6 border border-obsidian-700 flex flex-col justify-between relative overflow-hidden shadow-2xl">
-          {/* Header Pewawancara (Dual Panel Display) */}
+          {/* Header Pewawancara */}
           <div className="flex items-center justify-between border-b border-obsidian-700/80 pb-3">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -366,7 +423,7 @@ export default function LiveStudioPage() {
                   </h3>
                   {activeQuestion.isProbing && (
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 uppercase font-bold">
-                      ⚡ Probing Follow-Up
+                      ⚡ Dynamic Probing
                     </span>
                   )}
                 </div>
@@ -405,9 +462,16 @@ export default function LiveStudioPage() {
 
           {/* Current Question Dialogue Bubble */}
           <div className="p-4 rounded-2xl bg-obsidian-850/90 border border-obsidian-700 shadow-inner space-y-1.5">
-            <div className="flex items-center gap-2 text-[10px] font-mono text-obsidian-400 uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-electric-violet"></span>
-              <span>{activeQuestion.type}</span>
+            <div className="flex items-center justify-between text-[10px] font-mono text-obsidian-400 uppercase tracking-wider">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-electric-violet"></span>
+                <span>{activeQuestion.type}</span>
+              </div>
+              {activeQuestion.probingReason && (
+                <span className="text-amber-400 font-semibold normal-case">
+                  {activeQuestion.probingReason}
+                </span>
+              )}
             </div>
             <p className="text-sm sm:text-base text-slate-100 font-sans leading-relaxed font-semibold">
               "{activeQuestion.text}"
@@ -432,7 +496,7 @@ export default function LiveStudioPage() {
               <div className="px-3 flex-1">
                 <span className="text-xs font-bold text-white block">Pratinjau Kamera Aktif</span>
                 <p className="text-[11px] text-obsidian-400">
-                  Wajah & postur Anda termonitor untuk latihan kontak mata.
+                  Wajah & postur Anda termonitor untuk simulasi tatap muka nyata.
                 </p>
               </div>
               <button
@@ -447,10 +511,10 @@ export default function LiveStudioPage() {
           {/* 1. Indikator STAR Real-Time HUD */}
           <StarIndicator flags={starFlags} isSpeaking={isRecording} />
 
-          {/* 2. Smart Copilot Teleprompter */}
+          {/* 2. Smart Copilot Teleprompter (Dynamic based on user CV) */}
           <CopilotDrawer
             enabled={session.copilotEnabled}
-            hints={session.briefing.strengths.slice(0, 3)}
+            hints={dynamicCopilotHints}
           />
 
           {/* 3. Transkrip Langsung Kamu */}
@@ -510,7 +574,7 @@ export default function LiveStudioPage() {
             onClick={handleCommitTurn}
             className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-electric-violet to-indigo-600 hover:from-indigo-500 hover:to-indigo-600 text-white font-heading font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-electric-violet/25 hover:scale-[1.02] transition"
           >
-            <span>{currentTurnIdx < questionsList.length - 1 ? 'Kirim Jawaban & Lanjut' : 'Kirim & Nilai Sesi'}</span>
+            <span>{currentTurnIdx < turnQuestions.length - 1 ? 'Kirim Jawaban & Lanjut' : 'Kirim & Nilai Sesi'}</span>
             <Send className="w-3.5 h-3.5" />
           </button>
 
